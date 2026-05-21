@@ -1,0 +1,6 @@
+{
+  "name": "Employee Production Tracker",
+  "description": "Smart Employee Daily Feedback & Production Tracking Portal with Camera Face Recognition, Zapier triggers, and Automated AI Production Reports.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
