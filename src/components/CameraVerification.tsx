@@ -67,50 +67,61 @@ export function CameraVerification({ onVerified, registeredEmployees }: CameraVe
     try {
       const video = videoRef.current;
       const canvas = canvasRef.current;
+      
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        throw new Error("Webcam video feed dimensions are 0. The camera is not fully loaded. Please wait a moment or try again.");
+      }
+
       const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("Failed to initialize canvas 2D context.");
+      }
 
-      if (ctx) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        // Flip horizontal to look mirrored/natural
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      // Flip horizontal to look mirrored/natural
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const base64Image = canvas.toDataURL("image/jpeg", 0.85);
+      const base64Image = canvas.toDataURL("image/jpeg", 0.85);
 
-        // Fetch verification result from back-end server
-        const response = await fetch("/api/verify-face", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64Image }),
+      if (!base64Image || base64Image === "data:," || base64Image.trim() === "") {
+        throw new Error("Failed to capture a valid image frame from the webcam. The output was empty.");
+      }
+
+      // Fetch verification result from back-end server
+      const response = await fetch("/api/verify-face", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64Image }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Authentication server returned status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.confidence > 0.7) {
+        setScanStatus("success");
+        setVerificationFeedback({
+          matchedId: data.matchedEmployeeId,
+          matchedName: data.matchedName,
+          confidence: data.confidence,
+          reasoning: data.reasoning,
+          message: data.message,
         });
-
-        if (!response.ok) {
-          throw new Error(`Authentication server returned status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (data.success && data.confidence > 0.7) {
-          setScanStatus("success");
-          setVerificationFeedback({
-            matchedId: data.matchedEmployeeId,
-            matchedName: data.matchedName,
-            confidence: data.confidence,
-            reasoning: data.reasoning,
-            message: data.message,
-          });
-          // Wait 1.5 seconds to show visual feedback before proceeding
-          setTimeout(() => {
-            onVerified(data.matchedEmployeeId, data.matchedName);
-          }, 1500);
-        } else {
-          setScanStatus("fail");
-          setVerificationFeedback({
-            reasoning: data.reasoning || "Face scan did not yield a confident match against active files.",
-          });
-        }
+        // Wait 1.5 seconds to show visual feedback before proceeding
+        setTimeout(() => {
+          onVerified(data.matchedEmployeeId, data.matchedName);
+        }, 1500);
+      } else {
+        setScanStatus("fail");
+        setVerificationFeedback({
+          reasoning: data.reasoning || "Face scan did not yield a confident match against active files.",
+        });
       }
     } catch (err: any) {
       setScanStatus("fail");

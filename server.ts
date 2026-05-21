@@ -10,6 +10,17 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Diagnostics middleware to log requests
+app.use((req, res, next) => {
+  try {
+    const logMsg = `[${new Date().toISOString()}] ${req.method} ${req.url}\n`;
+    fs.appendFileSync(path.join(process.cwd(), "src/server-requests.log"), logMsg);
+  } catch (err) {
+    // Ignore logging errors
+  }
+  next();
+});
+
 // Enable JSON bodies with larger limits for base64 camera images
 app.use(express.json({ limit: "15mb" }));
 
@@ -596,12 +607,23 @@ app.post("/api/zapier", (req, res) => {
 app.post("/api/verify-face", async (req, res) => {
   try {
     const { imageBase64 } = req.body;
-    if (!imageBase64) {
-      return res.status(400).json({ error: "Webcam image frame is missing." });
+    if (!imageBase64 || imageBase64.trim() === "" || imageBase64 === "data:,") {
+      return res.status(400).json({ error: "The captured video stream image is missing or invalid." });
     }
 
-    // Strip header if present
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    // Strip header if present, handle potential data:, error or missing base64 specifier
+    let base64Data = imageBase64;
+    if (imageBase64.includes("base64,")) {
+      base64Data = imageBase64.split("base64,")[1];
+    } else if (imageBase64.startsWith("data:")) {
+      return res.status(400).json({ error: "The captured image format is incorrect (missing base64 descriptor)." });
+    }
+
+    // Ensure we have a valid, wholesome base64 block
+    const cleanedBase64 = base64Data.trim();
+    if (!cleanedBase64 || cleanedBase64.includes(",") || cleanedBase64.includes("data:")) {
+      return res.status(400).json({ error: "The camera frame did not yield a valid image payload." });
+    }
 
     if (!isGeminiEnabled()) {
       // Return beautiful mock response because the key isn't here yet, bypass politely to support seamless local exploration
@@ -647,7 +669,7 @@ Output JSON scheme:
       {
         inlineData: {
           mimeType: "image/jpeg",
-          data: base64Data,
+          data: cleanedBase64,
         },
       },
       {
