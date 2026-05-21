@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Diagnostics middleware to log requests
 app.use((req, res, next) => {
@@ -849,6 +849,7 @@ Provide your analysis in beautiful markdown. Highlight key entities and statisti
 // --- PLATFORM DEV & SERVING LOGIC ---
 async function bootstrapServer() {
   if (process.env.NODE_ENV !== "production") {
+    process.env.VITE_PARENT = "true";
     // Run vite server middleware in Dev
     const vite = await createViteServer({
       server: { middlewareMode: true },
